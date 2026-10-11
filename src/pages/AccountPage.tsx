@@ -21,6 +21,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { useCart } from '../context/CartContext';
 import { api } from '../services/api';
 import { Order, Address, Product } from '../types';
+import { HolographicTiltLogin } from '../components/auth/HolographicTiltLogin';
 
 interface AccountPageProps {
   initialTab?: string;
@@ -166,142 +167,42 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   // IF NOT LOGGED IN: SHOW AUTH FORMS
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#FDFBF7] py-16 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 border border-stone-200 shadow-md space-y-6">
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-full bg-[#58101E] text-amber-200 flex items-center justify-center mx-auto text-xl font-cinzel font-bold shadow-xs">
-              VG
-            </div>
-            <h1 className="font-serif font-bold text-2xl text-[#420B16]">
-              {authMode === 'login' && 'Customer Sign In'}
-              {authMode === 'register' && 'Create Your Account'}
-              {authMode === 'forgot' && 'Reset Account Password'}
-            </h1>
-            <p className="text-xs text-stone-500">
-              Vasavi Gadwal Saree House • Authentic Indian Handlooms
-            </p>
-          </div>
+      <div className="min-h-screen bg-[#0C090D] py-14 px-4 flex flex-col items-center justify-center relative overflow-hidden">
+        {/* Soft atmospheric background glow */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-[#801A2D]/20 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-10 left-1/3 w-[500px] h-[500px] bg-[#D4AF37]/15 rounded-full blur-[160px] pointer-events-none" />
 
-          {authError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{authError}</span>
-            </div>
-          )}
+        {/* Brand Header */}
+        <div className="text-center mb-4 z-10">
+          <img
+            src="/brand-logo.jpg"
+            alt="Vasavi Gadwal Saree House"
+            className="w-16 h-16 rounded-full mx-auto mb-3 border-2 border-[#D4AF37]/40 shadow-xl object-cover hover:scale-105 transition-transform"
+          />
+          <h1 className="font-serif font-bold text-2xl sm:text-3xl text-amber-100 tracking-wide">
+            Vasavi Gadwal Saree House
+          </h1>
+          <p className="text-xs text-stone-400 mt-1 max-w-sm mx-auto font-sans">
+            Handcrafted Gadwal Heritage Weaves • Authentic Telangana Loom Artistry
+          </p>
+        </div>
 
-          {authSuccessMsg && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
-              <Check className="w-4 h-4 shrink-0" />
-              <span>{authSuccessMsg}</span>
-            </div>
-          )}
+        {/* Holographic 3D Tilt Card */}
+        <HolographicTiltLogin
+          initialMode={authMode}
+          onSuccess={() => {
+            if (returnTo) onNavigate(returnTo);
+          }}
+        />
 
-          <form onSubmit={handleAuthSubmit} className="space-y-4 text-xs">
-            {authMode === 'register' && (
-              <>
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={authName}
-                    onChange={(e) => setAuthName(e.target.value)}
-                    placeholder="Smt. Rukmini Devi"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">Phone Number (10 digits) *</label>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    value={authPhone}
-                    onChange={(e) => setAuthPhone(e.target.value)}
-                    placeholder="9876543210"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900"
-                  />
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className="block font-semibold text-stone-700 mb-1">Email Address *</label>
-              <input
-                type="email"
-                required
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900"
-              />
-            </div>
-
-            {authMode !== 'forgot' && (
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block font-semibold text-stone-700">Password *</label>
-                  {authMode === 'login' && (
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode('forgot')}
-                      className="text-[11px] text-[#8E6B2C] hover:underline"
-                    >
-                      Forgot?
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="password"
-                  required
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900"
-                />
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={authLoading}
-              className="w-full py-3.5 bg-[#58101E] hover:bg-[#801A2D] text-white font-semibold text-xs tracking-wider uppercase rounded-xl transition-all shadow-md"
-            >
-              {authLoading
-                ? 'Processing...'
-                : authMode === 'login'
-                ? 'Sign In to Account'
-                : authMode === 'register'
-                ? 'Create Customer Account'
-                : 'Send Password Reset Link'}
-            </button>
-          </form>
-
-          {/* Toggle login vs register */}
-          <div className="text-center text-xs text-stone-600 pt-2 border-t border-stone-100">
-            {authMode === 'login' ? (
-              <p>
-                Don't have an account yet?{' '}
-                <button
-                  onClick={() => setAuthMode('register')}
-                  className="font-semibold text-[#58101E] hover:underline"
-                >
-                  Register here
-                </button>
-              </p>
-            ) : (
-              <p>
-                Already have an account?{' '}
-                <button
-                  onClick={() => setAuthMode('login')}
-                  className="font-semibold text-[#58101E] hover:underline"
-                >
-                  Sign In
-                </button>
-              </p>
-            )}
-          </div>
-
+        {/* Back to store navigation */}
+        <div className="mt-8 z-10">
+          <button
+            onClick={() => onNavigate('shop')}
+            className="text-xs text-stone-400 hover:text-amber-200 transition-colors flex items-center gap-1.5 font-medium"
+          >
+            <span>← Explore Saree Catalogue</span>
+          </button>
         </div>
       </div>
     );
