@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Fallback to project credentials so Vercel and local dev connect seamlessly
-const defaultUrl = 'https://zugqrnlpvdavhhsgqdqy.supabase.co';
-const defaultAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1Z3FybmxwdmRhdmhoc2dxZHF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3MDkyODEsImV4cCI6MjEwNzI4NTI4MX0.X2GhnFh1VHFRJQsqqw6D6qpEoTA_ZkgRtgk5RJ4mTDQ';
+const defaultUrl = 'https://dztidzyazvzrgrtvhqsd.supabase.co';
+const defaultAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6dGlkenlhenZ6cmdydHZocXNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3MzYzNjcsImV4cCI6MjEwNzMxMjM2N30.M1evrJIM5CBSWSmI-2PlX6PVi8VZwi_0qtfP8sBKJtM';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || defaultUrl;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || defaultAnonKey;
