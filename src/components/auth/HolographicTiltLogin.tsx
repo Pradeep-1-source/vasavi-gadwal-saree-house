@@ -343,13 +343,6 @@ export const HolographicTiltLogin: React.FC<HolographicTiltLoginProps> = ({
                 )}
               </div>
 
-              {/* Admin Hint */}
-              <div className="mt-5 pt-3 border-t border-white/10 text-center">
-                <p className="text-[11px] text-stone-400">
-                  Store Admin credentials: <span className="text-[#E5C158] font-mono">vasavi@admin</span> / <span className="text-[#E5C158] font-mono">vasavi@112</span>
-                </p>
-              </div>
-
             </form>
           </div>
         </div>

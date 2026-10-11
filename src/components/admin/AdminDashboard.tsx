@@ -253,7 +253,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         switchDemoRole('admin');
         loadAllData();
       } else {
-        alert('Invalid admin credentials. Please use vasavi@admin and pass: vasavi@112');
+        alert('Invalid admin credentials. Access denied.');
       }
     };
 
@@ -278,7 +278,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               type="text"
               name="adminUser"
               required
-              defaultValue="vasavi@admin"
+              placeholder="Admin Username or Email"
               className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-stone-900"
             />
           </div>
