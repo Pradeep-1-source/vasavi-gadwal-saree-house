@@ -604,3 +604,53 @@ SELECT id, 'Lakshmi Narayanan, Bengaluru', 5, 'Wore this peacock teal saree for 
 UNION ALL
 SELECT id, 'Dr. Anitha Rao, Vijayawada', 5, 'The bridal yellow and red combination with temple gopuram zari border is mesmerizing. Heavy pure zari work, exactly as shown. Highly recommended.', true FROM public.products WHERE sku = 'VGSH-BR-03'
 ON CONFLICT DO NOTHING;
+
+-- ==============================================================================
+-- 6. SUPABASE STORAGE BUCKET FOR DIRECT SAREE IMAGE UPLOADS
+-- ==============================================================================
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+    'products',
+    'products',
+    true,
+    10485760, -- 10MB limit
+    ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+)
+ON CONFLICT (id) DO UPDATE SET
+    public = true,
+    file_size_limit = 10485760,
+    allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[];
+
+-- Storage Policies
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "Public Saree Images Access" ON storage.objects;
+    CREATE POLICY "Public Saree Images Access"
+    ON storage.objects FOR SELECT
+    USING (bucket_id = 'products');
+EXCEPTION WHEN OTHERS THEN null;
+END $$;
+
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "Allow Upload Saree Photos" ON storage.objects;
+    CREATE POLICY "Allow Upload Saree Photos"
+    ON storage.objects FOR INSERT
+    WITH CHECK (bucket_id = 'products');
+EXCEPTION WHEN OTHERS THEN null;
+END $$;
+
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "Allow Update Saree Photos" ON storage.objects;
+    CREATE POLICY "Allow Update Saree Photos"
+    ON storage.objects FOR UPDATE
+    USING (bucket_id = 'products');
+EXCEPTION WHEN OTHERS THEN null;
+END $$;
+
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "Allow Delete Saree Photos" ON storage.objects;
+    CREATE POLICY "Allow Delete Saree Photos"
+    ON storage.objects FOR DELETE
+    USING (bucket_id = 'products');
+EXCEPTION WHEN OTHERS THEN null;
+END $$;
+

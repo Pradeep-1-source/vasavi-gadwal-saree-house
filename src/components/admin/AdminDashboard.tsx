@@ -19,11 +19,18 @@ import {
   TrendingUp,
   Clock,
   CheckCircle2,
-  Lock
+  Lock,
+  UploadCloud,
+  Image as ImageIcon,
+  Star,
+  Loader2,
+  Sparkles,
+  Upload
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { Product, Order, Category, Review, SiteSettings, OrderStatus, PaymentStatus } from '../../types';
+import { uploadSareeImage } from '../../utils/imageUpload';
 
 interface AdminDashboardProps {
   onNavigate: (page: string, params?: any) => void;
@@ -54,10 +61,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   // Product modal state
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
 
   // Category modal state
   const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isUploadingCatImage, setIsUploadingCatImage] = useState(false);
 
   // Selected order details modal
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -91,13 +102,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const pendingOrdersCount = orders.filter((o) => o.order_status === 'Pending').length;
   const lowStockProducts = products.filter((p) => p.stock_quantity <= 2);
 
-  // PRODUCT ACTIONS
+  // PRODUCT ACTIONS & IMAGE UPLOAD
+  const handlePhotoFiles = async (files: FileList | File[] | null) => {
+    if (!files || files.length === 0 || !editingProduct) return;
+    setIsUploadingImage(true);
+    setUploadError(null);
+
+    try {
+      const fileArray = Array.from(files);
+      const validFiles = fileArray.filter((f) => f.type.startsWith('image/'));
+      if (validFiles.length === 0) {
+        setUploadError('Please select valid image files (JPG, PNG, WEBP).');
+        setIsUploadingImage(false);
+        return;
+      }
+
+      const existingImages = [...(editingProduct.images || [])];
+
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        const imageUrl = await uploadSareeImage(file);
+        existingImages.push({
+          id: 'img-' + Date.now() + '-' + i,
+          image_url: imageUrl,
+          alt_text: editingProduct.name || file.name.replace(/\.[^/.]+$/, ''),
+          display_order: existingImages.length + 1,
+        });
+      }
+
+      setEditingProduct({
+        ...editingProduct,
+        images: existingImages,
+      });
+    } catch (err: any) {
+      console.error('Failed to upload saree image:', err);
+      setUploadError('Failed to upload image. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    if (!editingProduct) return;
+    const updated = [...(editingProduct.images || [])];
+    updated.splice(index, 1);
+    const reindexed = updated.map((img, idx) => ({ ...img, display_order: idx + 1 }));
+    setEditingProduct({ ...editingProduct, images: reindexed });
+  };
+
+  const handleSetCoverPhoto = (index: number) => {
+    if (!editingProduct || !editingProduct.images || editingProduct.images.length <= 1) return;
+    const current = [...editingProduct.images];
+    const [chosen] = current.splice(index, 1);
+    current.unshift(chosen);
+    const reindexed = current.map((img, idx) => ({ ...img, display_order: idx + 1 }));
+    setEditingProduct({ ...editingProduct, images: reindexed });
+  };
+
+  const handleCategoryPhoto = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !editingCategory) return;
+    const file = files[0];
+    if (!file.type.startsWith('image/')) return;
+    setIsUploadingCatImage(true);
+    try {
+      const url = await uploadSareeImage(file);
+      setEditingCategory({ ...editingCategory, image_url: url });
+    } catch (err) {
+      console.error('Failed to upload category image:', err);
+    } finally {
+      setIsUploadingCatImage(false);
+    }
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
+    if (!editingProduct.images || editingProduct.images.length === 0 || !editingProduct.images[0]?.image_url) {
+      alert('Please upload at least one saree photo before saving.');
+      return;
+    }
     await api.saveProduct(editingProduct);
     setIsProductModalOpen(false);
     setEditingProduct(null);
+    setUploadError(null);
     loadAllData();
   };
 
@@ -263,15 +350,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   is_featured: false,
                   is_active: true,
                   description: '',
-                  images: [
-                    {
-                      id: 'img-' + Date.now(),
-                      image_url: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=800&q=80',
-                      alt_text: 'Gadwal Saree',
-                      display_order: 1,
-                    }
-                  ]
+                  images: []
                 });
+                setUploadError(null);
                 setIsProductModalOpen(true);
               }}
               className="px-4 py-2 rounded-xl bg-[#58101E] hover:bg-[#801A2D] text-white text-xs font-semibold tracking-wide flex items-center gap-1.5 shadow-md transition-colors"
@@ -1025,26 +1106,142 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">
-                    Primary Saree Photo URL *
-                  </label>
-                  <input
-                    type="url"
-                    required
-                    value={editingProduct.images?.[0]?.image_url || ''}
-                    onChange={(e) => {
-                      const imgs = [...(editingProduct.images || [])];
-                      if (imgs.length > 0) {
-                        imgs[0] = { ...imgs[0], image_url: e.target.value };
-                      } else {
-                        imgs.push({ id: 'img-1', image_url: e.target.value, display_order: 1 });
-                      }
-                      setEditingProduct({ ...editingProduct, images: imgs });
+                {/* DIRECT SAREE IMAGE UPLOAD (NO URL INPUT) */}
+                <div className="bg-stone-50/80 p-4 rounded-2xl border border-stone-200/90">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <label className="block text-xs font-bold text-stone-800">
+                        Saree Photos (Direct Upload) *
+                      </label>
+                      <p className="text-[11px] text-stone-500 mt-0.5">
+                        Upload high-resolution drape, zari border, or pallu photos directly from your phone/computer.
+                      </p>
+                    </div>
+                    {editingProduct.images && editingProduct.images.length > 0 && (
+                      <span className="text-[11px] font-semibold text-[#58101E] bg-[#58101E]/10 px-2.5 py-0.5 rounded-full">
+                        {editingProduct.images.length} {editingProduct.images.length === 1 ? 'Photo' : 'Photos'}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Thumbnail gallery if images exist */}
+                  {editingProduct.images && editingProduct.images.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3">
+                      {editingProduct.images.map((img, idx) => (
+                        <div
+                          key={img.id || idx}
+                          className="group relative rounded-xl border border-stone-200 overflow-hidden bg-white shadow-xs aspect-square"
+                        >
+                          <img
+                            src={img.image_url}
+                            alt={img.alt_text || `Saree ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+
+                          {/* Primary Cover Badge */}
+                          {idx === 0 ? (
+                            <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-[#58101E] text-amber-200 text-[10px] font-bold flex items-center gap-1 shadow">
+                              <Star className="w-2.5 h-2.5 fill-amber-300" />
+                              <span>Cover</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSetCoverPhoto(idx)}
+                              className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-white/95 hover:bg-white text-stone-700 hover:text-[#58101E] text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                            >
+                              Make Cover
+                            </button>
+                          )}
+
+                          {/* Delete Photo Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(idx)}
+                            className="absolute top-1.5 right-1.5 p-1 rounded-full bg-red-600/90 hover:bg-red-700 text-white opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                            title="Delete this photo"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+
+                          {/* Order indicator */}
+                          <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[9px] font-medium backdrop-blur-xs">
+                            #{idx + 1}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Upload Dropzone */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingPhoto(true);
                     }}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs"
-                    placeholder="https://images.unsplash.com/..."
-                  />
+                    onDragLeave={() => setIsDraggingPhoto(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingPhoto(false);
+                      if (e.dataTransfer.files) {
+                        handlePhotoFiles(e.dataTransfer.files);
+                      }
+                    }}
+                    className={`relative border-2 border-dashed rounded-xl p-4 text-center transition-all bg-white ${
+                      isDraggingPhoto
+                        ? 'border-[#58101E] bg-[#58101E]/5 scale-[1.01]'
+                        : 'border-stone-300 hover:border-[#58101E]/70'
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      id="saree-photo-file-input"
+                      accept="image/*"
+                      multiple
+                      disabled={isUploadingImage}
+                      onChange={(e) => {
+                        handlePhotoFiles(e.target.files);
+                        e.target.value = '';
+                      }}
+                      className="hidden"
+                    />
+
+                    {isUploadingImage ? (
+                      <div className="py-2.5 flex flex-col items-center justify-center gap-1.5">
+                        <Loader2 className="w-6 h-6 text-[#58101E] animate-spin" />
+                        <p className="text-xs font-semibold text-stone-800">
+                          Uploading and optimizing saree photo...
+                        </p>
+                        <p className="text-[11px] text-stone-500">
+                          Please wait a moment
+                        </p>
+                      </div>
+                    ) : (
+                      <label
+                        htmlFor="saree-photo-file-input"
+                        className="cursor-pointer flex flex-col items-center justify-center gap-2 py-1"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-[#58101E]/10 text-[#58101E] flex items-center justify-center shadow-xs">
+                          <UploadCloud className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-stone-800">
+                            <span className="text-[#58101E] underline decoration-amber-500 underline-offset-2">Click to choose image file</span> or drag & drop here
+                          </p>
+                          <p className="text-[11px] text-stone-500 mt-0.5">
+                            Supports JPG, PNG, WEBP — upload multiple angles (Pallu, border, full saree)
+                          </p>
+                        </div>
+                      </label>
+                    )}
+                  </div>
+
+                  {uploadError && (
+                    <div className="mt-2 text-xs text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-200 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{uploadError}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -1111,9 +1308,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2.5 rounded-xl bg-[#58101E] text-white text-xs font-semibold hover:bg-[#801A2D]"
+                      disabled={isUploadingImage}
+                      className="px-6 py-2.5 rounded-xl bg-[#58101E] text-white text-xs font-semibold hover:bg-[#801A2D] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                     >
-                      Save Saree
+                      {isUploadingImage && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      <span>{isUploadingImage ? 'Uploading Photos...' : 'Save Saree'}</span>
                     </button>
                   </div>
                 </div>
@@ -1150,13 +1349,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Cover Image URL</label>
-                  <input
-                    type="url"
-                    value={editingCategory.image_url || ''}
-                    onChange={(e) => setEditingCategory({ ...editingCategory, image_url: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-xl"
-                  />
+                  <label className="block font-semibold mb-1">Cover Image (Direct Upload)</label>
+                  <div className="flex items-center gap-3">
+                    {editingCategory.image_url && (
+                      <img
+                        src={editingCategory.image_url}
+                        alt="Category Cover"
+                        className="w-12 h-12 rounded-xl object-cover border border-stone-300 shrink-0"
+                      />
+                    )}
+                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold flex items-center gap-2 border border-stone-300 transition-colors">
+                      {isUploadingCatImage ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#58101E]" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="w-4 h-4 text-[#58101E]" />
+                          <span>Upload Category Photo</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingCatImage}
+                        onChange={(e) => {
+                          handleCategoryPhoto(e.target.files);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Description</label>
