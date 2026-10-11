@@ -114,7 +114,7 @@ export interface Order {
   delivery_charge: number; // ₹100
   discount_amount: number;
   total_amount: number;
-  payment_provider: 'razorpay' | 'cash_on_delivery' | 'test_mode';
+  payment_provider: 'whatsapp' | 'phonepe_upi' | 'razorpay' | 'cash_on_delivery' | 'test_mode' | string;
   payment_status: PaymentStatus;
   order_status: OrderStatus;
   razorpay_order_id?: string;

@@ -267,7 +267,7 @@ export const api = {
     deliveryCharge: number;
     discountAmount: number;
     totalAmount: number;
-    paymentProvider: 'razorpay' | 'cash_on_delivery' | 'test_mode';
+    paymentProvider: 'whatsapp' | 'phonepe_upi' | 'razorpay' | 'cash_on_delivery' | 'test_mode' | string;
     paymentStatus: PaymentStatus;
     razorpayOrderId?: string;
     razorpayPaymentId?: string;

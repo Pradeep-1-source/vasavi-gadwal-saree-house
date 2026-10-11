@@ -46,9 +46,21 @@ export const PaymentResultPage: React.FC<PaymentResultPageProps> = ({ orderId, o
   }
 
   const orderNumber = order?.order_number || 'VGSH-ORD-CONFIRMED';
-  const whatsappUrl = `https://wa.me/917660833168?text=${encodeURIComponent(
-    `Namaste Vasavi Gadwal Saree House, I have placed an order with Order ID: *${orderNumber}*. Could you please confirm estimated dispatch time?`
-  )}`;
+  const itemsText = (order?.items || []).map((it, idx) => 
+    `${idx + 1}. *${it.product_name_snapshot}* (Qty: ${it.quantity}) - ₹${it.line_total.toLocaleString('en-IN')}`
+  ).join('\n');
+  const addrText = order?.address_snapshot ? 
+    `\n*Delivery Address:*\n${order.address_snapshot.full_name}, ${order.address_snapshot.house_number}, ${order.address_snapshot.street}, ${order.address_snapshot.city}, ${order.address_snapshot.state} - ${order.address_snapshot.pincode} (📞 ${order.address_snapshot.phone})` : '';
+
+  const whatsappMessage = 
+    `*NAMASTE VASAVI GADWAL SAREE HOUSE* 🥻✨\n\n` +
+    `I have confirmed my order: *${orderNumber}*\n\n` +
+    (itemsText ? `*Items:*\n${itemsText}\n\n` : '') +
+    `*Total Amount:* ₹${(order?.total_amount || 0).toLocaleString('en-IN')}` +
+    addrText +
+    `\n\nPlease confirm dispatch details. Dhanyavadagalu! 🙏`;
+
+  const whatsappUrl = `https://wa.me/917660833168?text=${encodeURIComponent(whatsappMessage)}`;
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] py-12">

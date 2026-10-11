@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Address } from '../../types';
-import { Check, MapPin, AlertCircle } from 'lucide-react';
+import { Check, MapPin, AlertCircle, MessageCircle, ArrowRight } from 'lucide-react';
 
 interface AddressFormProps {
   initialAddress?: Address | null;
@@ -132,7 +132,10 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             Delivery Address
           </h3>
         </div>
-        <span className="text-xs text-stone-500 font-medium">Step 1 of 2</span>
+        <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+          <MessageCircle className="w-3.5 h-3.5" />
+          Direct WhatsApp Order
+        </span>
       </div>
 
       {/* Select from existing addresses if available */}
@@ -398,15 +401,20 @@ export const AddressForm: React.FC<AddressFormProps> = ({
           </span>
         </div>
 
-        {/* Submit */}
-        <div className="pt-4">
+        {/* Submit to WhatsApp */}
+        <div className="pt-4 space-y-2">
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3.5 px-6 rounded-xl bg-[#58101E] hover:bg-[#801A2D] text-white font-semibold text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2"
+            className="w-full py-4 px-6 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-semibold text-xs tracking-wider uppercase transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2.5 disabled:opacity-50"
           >
-            <span>Confirm Delivery Address & Proceed to Payment</span>
+            <MessageCircle className="w-4 h-4 shrink-0" />
+            <span>{isSubmitting ? 'Placing Order & Preparing WhatsApp...' : 'Confirm Address & Place Order via WhatsApp'}</span>
+            <ArrowRight className="w-4 h-4 shrink-0" />
           </button>
+          <p className="text-[11px] text-center text-stone-500">
+            ✨ No online payment gateway needed. Submitting this form creates your order and redirects directly to WhatsApp to confirm details.
+          </p>
         </div>
       </form>
     </div>

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Lock, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Lock, AlertCircle, ArrowLeft, MessageCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { AddressForm } from '../components/checkout/AddressForm';
 import { OrderSummary } from '../components/checkout/OrderSummary';
-import { PhonePePaymentModal } from '../components/checkout/PhonePePaymentModal';
 import { Address, Order } from '../types';
 import { api } from '../services/api';
 
@@ -18,10 +17,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
 
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
   const [confirmedAddress, setConfirmedAddress] = useState<Address | null>(null);
-  const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
-  const [isPhonePeModalOpen, setIsPhonePeModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentError, setPaymentError] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Load saved addresses for user
   useEffect(() => {
@@ -36,19 +33,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     }
   }, [user]);
 
-  if (cart.length === 0 && !createdOrder) {
+  if (cart.length === 0) {
     return (
       <div className="min-h-[70vh] bg-[#FDFBF7] flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-stone-200 text-center shadow-sm space-y-4">
           <h2 className="font-serif font-bold text-2xl text-stone-900">
-            No Sarees to Checkout
+            No Sarees in Bag
           </h2>
           <p className="text-xs text-stone-500">
-            Please add your favorite handwoven sarees to the bag first.
+            Please add your favorite handwoven sarees to your shopping bag first.
           </p>
           <button
             onClick={() => onNavigate('shop')}
-            className="w-full py-3 bg-[#58101E] text-white text-xs font-semibold rounded-xl"
+            className="w-full py-3 bg-[#58101E] text-white text-xs font-semibold rounded-xl hover:bg-[#801A2D] transition-colors"
           >
             Go to Catalogue
           </button>
@@ -57,7 +54,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     );
   }
 
-  // Requirement: Checkout requires customer login
+  // Requirement: Customer account for address & order recording
   if (!user) {
     return (
       <div className="min-h-[75vh] bg-[#FDFBF7] flex items-center justify-center p-4">
@@ -71,7 +68,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
               Customer Sign In Required
             </h2>
             <p className="text-xs text-stone-600 mt-2 leading-relaxed">
-              To safeguard your order tracking, address book, and dispatch updates, please sign in or register your account before proceeding to secure payment.
+              To save your delivery address, record your order history, and ensure seamless delivery tracking, please sign in or register before completing your order.
             </p>
           </div>
 
@@ -95,17 +92,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     );
   }
 
-  // Handle address confirmed -> create pending order -> launch payment modal
+  // Submit address -> Create order -> Redirect directly to WhatsApp
   const handleAddressSubmit = async (address: Address) => {
     setIsProcessing(true);
-    setPaymentError('');
+    setErrorMessage('');
 
     try {
       // 1. Save or update address in user's address book
       const savedAddr = await api.saveAddress({ ...address, user_id: user.id });
       setConfirmedAddress(savedAddr);
 
-      // 2. Server/backend creates pending order
+      // 2. Create order in store records
       const order = await api.createOrder({
         userId: user.id,
         userEmail: user.email,
@@ -116,41 +113,62 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
         deliveryCharge,
         discountAmount,
         totalAmount,
-        paymentProvider: 'phonepe_upi' as any,
+        paymentProvider: 'whatsapp',
         paymentStatus: 'Pending',
-        razorpayOrderId: 'phonepe_' + Math.random().toString(36).substring(2, 12),
       });
 
-      setCreatedOrder(order);
+      // 3. Format detailed WhatsApp message
+      const orderNumber = order.order_number || `VGSH-ORD-${order.id.slice(0, 8).toUpperCase()}`;
+      
+      const itemsText = cart.map((item, idx) => 
+        `${idx + 1}. *${item.product.name}*\n   • SKU: ${item.product.sku}\n   • Qty: ${item.quantity}\n   • Price: ₹${(item.product.price * item.quantity).toLocaleString('en-IN')}`
+      ).join('\n\n');
+
+      const addressText = 
+        `*Name:* ${savedAddr.full_name}\n` +
+        `*Phone:* ${savedAddr.phone}\n` +
+        `*Address:* ${savedAddr.house_number}${savedAddr.building_name ? ', ' + savedAddr.building_name : ''}, ${savedAddr.street}, ${savedAddr.locality}\n` +
+        `*City/State:* ${savedAddr.city}, ${savedAddr.state} - ${savedAddr.pincode}\n` +
+        `*Country:* ${savedAddr.country || 'India'}`;
+
+      const whatsappMessage = 
+        `*NAMASTE VASAVI GADWAL SAREE HOUSE* 🥻✨\n\n` +
+        `I would like to place an order for the following handcrafted Gadwal saree(s):\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `*ORDER DETAILS*\n` +
+        `*Order ID:* ${orderNumber}\n` +
+        `━━━━━━━━━━━━━━━━━━━\n\n` +
+        `${itemsText}\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `*PRICE BREAKDOWN*\n` +
+        `• Subtotal: ₹${subtotal.toLocaleString('en-IN')}\n` +
+        `• Express Delivery: ${deliveryCharge === 0 ? 'FREE' : '₹' + deliveryCharge}\n` +
+        (discountAmount > 0 ? `• Discount: -₹${discountAmount.toLocaleString('en-IN')}\n` : '') +
+        `• *Total Payable: ₹${totalAmount.toLocaleString('en-IN')}*\n` +
+        `━━━━━━━━━━━━━━━━━━━\n\n` +
+        `*DELIVERY ADDRESS*\n` +
+        `${addressText}\n\n` +
+        `Please confirm my saree order and share dispatch / tracking details. Dhanyavadagalu! 🙏`;
+
+      const whatsappUrl = `https://wa.me/917660833168?text=${encodeURIComponent(whatsappMessage)}`;
+
+      // 4. Empty the shopping cart
+      clearCart();
       setIsProcessing(false);
-      setIsPhonePeModalOpen(true);
+
+      // 5. Open WhatsApp in new tab
+      try {
+        window.open(whatsappUrl, '_blank');
+      } catch (e) {
+        console.warn('Pop-up blocked, redirecting', e);
+      }
+
+      // 6. Navigate to confirmation page
+      onNavigate('payment-result', { orderId: order.id, whatsappUrl });
     } catch (err: any) {
       setIsProcessing(false);
-      setPaymentError(err.message || 'Unable to prepare order. Please try again.');
+      setErrorMessage(err.message || 'Unable to place order. Please check your address details.');
     }
-  };
-
-  // Payment verified callback
-  const handlePaymentSuccess = async (paymentId: string) => {
-    if (!createdOrder) return;
-    setIsProcessing(true);
-
-    // Update order payment status to Paid
-    const updated = await api.updatePaymentStatus(createdOrder.id, 'Paid', {
-      razorpayPaymentId: paymentId,
-    });
-
-    clearCart();
-    setIsPhonePeModalOpen(false);
-    setIsProcessing(false);
-
-    // Navigate to order confirmation
-    onNavigate('payment-result', { orderId: updated?.id || createdOrder.id });
-  };
-
-  const handlePaymentFailure = (errorMsg: string) => {
-    setPaymentError(errorMsg);
-    setIsPhonePeModalOpen(false);
   };
 
   return (
@@ -159,7 +177,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
         <div className="flex items-center justify-between mb-8 pb-4 border-b border-stone-200">
           <div>
             <h1 className="font-serif font-bold text-3xl sm:text-4xl text-[#420B16]">
-              Secure Checkout
+              Delivery Details & Order Confirmation
             </h1>
             <p className="text-xs text-stone-500 mt-1">
               Signed in as <strong className="text-stone-800">{user.full_name}</strong> ({user.email})
@@ -175,10 +193,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
           </button>
         </div>
 
-        {paymentError && (
+        {errorMessage && (
           <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
-            <span>{paymentError}</span>
+            <span>{errorMessage}</span>
           </div>
         )}
 
@@ -206,17 +224,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
-
-      {/* PhonePe QR Code Payment Modal */}
-      {createdOrder && (
-        <PhonePePaymentModal
-          order={createdOrder}
-          isOpen={isPhonePeModalOpen}
-          onSuccess={handlePaymentSuccess}
-          onFailure={handlePaymentFailure}
-          onClose={() => setIsPhonePeModalOpen(false)}
-        />
-      )}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, ArrowRight, Trash2, Plus, Minus, Truck, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { ShoppingBag, ArrowRight, Trash2, Plus, Minus, Truck, ShieldCheck, ArrowLeft, MessageCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 interface CartPageProps {
@@ -217,9 +217,9 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
               <ArrowRight className="w-4 h-4" />
             </button>
 
-            <div className="p-3 bg-[#FDFBF7] rounded-xl border border-stone-200 flex items-center justify-center gap-2 text-[11px] text-stone-500">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>PhonePe UPI QR • Instant Bank Transfer</span>
+            <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 flex items-center justify-center gap-2 text-[11px] text-emerald-800">
+              <MessageCircle className="w-4 h-4 text-[#25D366]" />
+              <span>Direct WhatsApp Order • Genuine Handloom Guarantee</span>
             </div>
           </div>
         </div>
