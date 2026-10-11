@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: #241E1C;
+    background-color: #FDFBF7;
+    scroll-behavior: smooth;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    letter-spacing: -0.01em;
+  }
+
+  .font-brand {
+    font-family: 'Cinzel', serif;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #F9F5EC;
+}
+::-webkit-scrollbar-thumb {
+  background: #C5A059;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #AA863F;
+}
+
+/* Gold Shimmer effect */
+@keyframes goldShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.text-gold-gradient {
+  background: linear-gradient(135deg, #F3E5AB 0%, #D4AF37 50%, #C5A059 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-border-glow {
+  box-shadow: 0 0 15px rgba(212, 175, 55, 0.25);
+}
+
+.subtle-shadow {
+  box-shadow: 0 4px 20px -2px rgba(88, 16, 30, 0.06);
+}
+
+/* Traditional Indian textile subtle motifs / borders */
+.border-zari {
+  border-image: linear-gradient(to right, #C5A059, #F7F1DC, #C5A059) 1;
+}

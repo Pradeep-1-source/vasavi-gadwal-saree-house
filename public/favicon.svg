@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F3E5AB" />
+      <stop offset="50%" stop-color="#D4AF37" />
+      <stop offset="100%" stop-color="#99752D" />
+    </linearGradient>
+    <radialGradient id="maroonBg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#800020" />
+      <stop offset="100%" stop-color="#420D13" />
+    </radialGradient>
+  </defs>
+  <rect width="100" height="100" rx="20" fill="url(#maroonBg)" />
+  <circle cx="50" cy="50" r="42" fill="none" stroke="url(#goldGrad)" stroke-width="2" stroke-dasharray="4,2" />
+  <!-- Traditional Paisley / Kuttu Zari Motif -->
+  <path d="M50 20 C62 26 72 38 68 54 C65 67 52 75 42 72 C32 68 28 56 34 46 C38 40 46 36 50 20 Z" fill="none" stroke="url(#goldGrad)" stroke-width="3" stroke-linecap="round" />
+  <circle cx="50" cy="52" r="5" fill="url(#goldGrad)" />
+  <path d="M50 32 C54 36 58 44 56 52" fill="none" stroke="url(#goldGrad)" stroke-width="1.5" />
+</svg>
