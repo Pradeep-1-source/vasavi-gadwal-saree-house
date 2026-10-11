@@ -76,7 +76,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const loadAllData = async () => {
     setLoading(true);
     const [prods, ords, cats, revs, sets] = await Promise.all([
-      api.getProducts(),
+      api.getProducts({ includeInactive: true }),
       api.getAllOrders(),
       api.getCategories(),
       api.getReviews(),

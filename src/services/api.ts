@@ -12,6 +12,11 @@ const STORAGE_KEYS = {
   SETTINGS: 'vgsh_site_settings',
 };
 
+const isUuid = (id?: string | null): boolean => {
+  if (!id) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+};
+
 // Initialize localStorage with seed data if not present
 const getLocalData = <T>(key: string, fallback: T): T => {
   try {
@@ -44,6 +49,7 @@ export const api = {
     maxPrice?: number;
     sortBy?: 'price-asc' | 'price-desc' | 'newest' | 'featured';
     featuredOnly?: boolean;
+    includeInactive?: boolean;
   }): Promise<Product[]> {
     if (isSupabaseConfigured) {
       try {
@@ -53,14 +59,17 @@ export const api = {
             *,
             categories (id, name, slug),
             product_images (*)
-          `)
-          .eq('is_active', true);
+          `);
+
+        if (!params?.includeInactive) {
+          query = query.eq('is_active', true);
+        }
 
         if (params?.featuredOnly) {
           query = query.eq('is_featured', true);
         }
 
-        const { data, error } = await query;
+        const { data, error } = await query.order('created_at', { ascending: false });
         if (error) throw error;
 
         if (data && data.length > 0) {
@@ -69,26 +78,29 @@ export const api = {
             sku: item.sku,
             name: item.name,
             slug: item.slug,
-            description: item.description,
+            description: item.description || '',
             price: Number(item.price),
             compare_at_price: item.compare_at_price ? Number(item.compare_at_price) : undefined,
             category_id: item.category_id,
             category_name: item.categories?.name,
-            fabric: item.fabric,
-            colour: item.colour,
-            saree_length: item.saree_length,
-            blouse_details: item.blouse_details,
-            stock_quantity: item.stock_quantity,
-            is_featured: item.is_featured,
-            is_active: item.is_active,
+            fabric: item.fabric || 'Pure Gadwal Silk',
+            colour: item.colour || 'Maroon',
+            saree_length: item.saree_length || '6.2 Meters (including blouse)',
+            blouse_details: item.blouse_details || 'Attached Contrast Blouse Piece (80 cm)',
+            stock_quantity: item.stock_quantity ?? 5,
+            is_featured: item.is_featured ?? false,
+            is_active: item.is_active ?? true,
             images: (item.product_images || []).sort((a: any, b: any) => a.display_order - b.display_order),
             created_at: item.created_at,
           }));
 
+          // Synchronize local cache with latest cloud products
+          setLocalData(STORAGE_KEYS.PRODUCTS, mapped);
+
           if (params?.categorySlug) {
             mapped = mapped.filter(p => {
-              const cat = itemCategoriesLocal().find(c => c.slug === params.categorySlug);
-              return p.category_id === cat?.id;
+              const itemCat = data.find((d: any) => d.id === p.id)?.categories;
+              return itemCat?.slug === params.categorySlug;
             });
           }
 
@@ -117,13 +129,16 @@ export const api = {
           return mapped;
         }
       } catch (err) {
-        console.warn('Supabase products fetch failed, falling back to local dataset', err);
+        console.warn('Supabase products fetch error, using local dataset:', err);
       }
     }
 
     // Fallback to local storage
     let products = getLocalData<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
 
+    if (!params?.includeInactive) {
+      products = products.filter(p => p.is_active);
+    }
     if (params?.featuredOnly) {
       products = products.filter(p => p.is_featured);
     }
@@ -140,8 +155,7 @@ export const api = {
         p.name.toLowerCase().includes(s) || 
         p.description.toLowerCase().includes(s) || 
         p.colour.toLowerCase().includes(s) ||
-        p.fabric.toLowerCase().includes(s) ||
-        p.sku.toLowerCase().includes(s)
+        p.fabric.toLowerCase().includes(s)
       );
     }
     if (params?.minPrice !== undefined) {
@@ -160,37 +174,49 @@ export const api = {
   },
 
   async getProductBySlug(slug: string): Promise<Product | null> {
-    const products = await this.getProducts();
+    const products = await this.getProducts({ includeInactive: true });
     return products.find(p => p.slug === slug) || null;
   },
 
   async getProductById(id: string): Promise<Product | null> {
-    const products = await this.getProducts();
+    const products = await this.getProducts({ includeInactive: true });
     return products.find(p => p.id === id) || null;
   },
 
   async saveProduct(product: Partial<Product>): Promise<Product> {
-    let products = getLocalData<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-    if (product.id) {
-      // Update
-      const index = products.findIndex(p => p.id === product.id);
-      if (index !== -1) {
-        products[index] = { ...products[index], ...product, updated_at: new Date().toISOString() } as Product;
-        setLocalData(STORAGE_KEYS.PRODUCTS, products);
-        return products[index];
+    // 1. Resolve category UUID if needed
+    let validCategoryId: string | null = null;
+    const categories = await this.getCategories();
+    if (product.category_id && isUuid(product.category_id)) {
+      validCategoryId = product.category_id;
+    } else if (product.category_id) {
+      // Look up matching category by slug or id or name
+      const found = categories.find(c => c.id === product.category_id || c.slug === product.category_id || c.name === product.category_name);
+      if (found && isUuid(found.id)) {
+        validCategoryId = found.id;
+      } else if (categories.length > 0 && isUuid(categories[0].id)) {
+        validCategoryId = categories[0].id;
       }
+    } else if (categories.length > 0 && isUuid(categories[0].id)) {
+      validCategoryId = categories[0].id;
     }
-    // Create new
-    const newProduct: Product = {
-      id: 'prod-' + Date.now(),
-      sku: product.sku || `VGSH-${Math.floor(1000 + Math.random() * 9000)}`,
+
+    const categoryObj = categories.find(c => c.id === validCategoryId);
+    const categoryName = categoryObj?.name || product.category_name || 'Pure Gadwal Silk Sarees';
+
+    const cleanSlug = (product.slug || (product.name || 'gadwal-saree').toLowerCase())
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+
+    const generatedSku = product.sku || `VGSH-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const productPayload = {
       name: product.name || 'New Gadwal Saree',
-      slug: (product.name || 'new-gadwal-saree').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+      slug: cleanSlug,
       description: product.description || '',
-      price: product.price || 9999,
-      compare_at_price: product.compare_at_price,
-      category_id: product.category_id || 'cat-gadwal-silk',
-      category_name: product.category_name,
+      price: Number(product.price) || 9999,
+      compare_at_price: product.compare_at_price ? Number(product.compare_at_price) : null,
+      category_id: validCategoryId,
       fabric: product.fabric || 'Pure Gadwal Silk',
       colour: product.colour || 'Maroon',
       saree_length: product.saree_length || '6.2 Meters (including blouse)',
@@ -198,24 +224,170 @@ export const api = {
       stock_quantity: product.stock_quantity ?? 5,
       is_featured: product.is_featured ?? false,
       is_active: product.is_active ?? true,
-      images: product.images && product.images.length > 0 ? product.images : [
-        {
-          id: 'img-' + Date.now(),
-          image_url: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=1000&q=85',
-          alt_text: product.name || 'Gadwal Saree',
-          display_order: 1
-        }
-      ],
-      created_at: new Date().toISOString()
+      updated_at: new Date().toISOString()
     };
-    products.unshift(newProduct);
+
+    let savedProduct: Product | null = null;
+
+    if (isSupabaseConfigured) {
+      try {
+        if (product.id && isUuid(product.id)) {
+          // Update existing product in Supabase
+          const { data: updated, error: updateErr } = await supabase
+            .from('products')
+            .update(productPayload)
+            .eq('id', product.id)
+            .select('*, categories(*)')
+            .single();
+
+          if (updateErr) throw updateErr;
+
+          // Re-sync product images
+          if (product.images && product.images.length > 0) {
+            await supabase.from('product_images').delete().eq('product_id', product.id);
+            const imageInserts = product.images.map((img, idx) => ({
+              product_id: product.id,
+              image_url: img.image_url,
+              alt_text: img.alt_text || product.name || 'Gadwal Saree',
+              display_order: img.display_order ?? idx + 1,
+            }));
+            await supabase.from('product_images').insert(imageInserts);
+          }
+
+          savedProduct = {
+            id: updated.id,
+            sku: updated.sku,
+            name: updated.name,
+            slug: updated.slug,
+            description: updated.description,
+            price: Number(updated.price),
+            compare_at_price: updated.compare_at_price ? Number(updated.compare_at_price) : undefined,
+            category_id: updated.category_id,
+            category_name: updated.categories?.name || categoryName,
+            fabric: updated.fabric,
+            colour: updated.colour,
+            saree_length: updated.saree_length,
+            blouse_details: updated.blouse_details,
+            stock_quantity: updated.stock_quantity,
+            is_featured: updated.is_featured,
+            is_active: updated.is_active,
+            images: product.images || [],
+            created_at: updated.created_at,
+          };
+        } else {
+          // Insert new product in Supabase
+          const { data: inserted, error: insertErr } = await supabase
+            .from('products')
+            .insert({
+              ...productPayload,
+              sku: generatedSku,
+              created_at: new Date().toISOString(),
+            })
+            .select('*, categories(*)')
+            .single();
+
+          if (insertErr) throw insertErr;
+
+          let finalImages = product.images && product.images.length > 0 ? product.images : [
+            {
+              id: 'img-' + Date.now(),
+              image_url: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=1000&q=85',
+              alt_text: product.name || 'Gadwal Saree',
+              display_order: 1
+            }
+          ];
+
+          const imageInserts = finalImages.map((img, idx) => ({
+            product_id: inserted.id,
+            image_url: img.image_url,
+            alt_text: img.alt_text || product.name || 'Gadwal Saree',
+            display_order: img.display_order ?? idx + 1,
+          }));
+
+          const { data: dbImages } = await supabase.from('product_images').insert(imageInserts).select();
+
+          savedProduct = {
+            id: inserted.id,
+            sku: inserted.sku,
+            name: inserted.name,
+            slug: inserted.slug,
+            description: inserted.description,
+            price: Number(inserted.price),
+            compare_at_price: inserted.compare_at_price ? Number(inserted.compare_at_price) : undefined,
+            category_id: inserted.category_id,
+            category_name: inserted.categories?.name || categoryName,
+            fabric: inserted.fabric,
+            colour: inserted.colour,
+            saree_length: inserted.saree_length,
+            blouse_details: inserted.blouse_details,
+            stock_quantity: inserted.stock_quantity,
+            is_featured: inserted.is_featured,
+            is_active: inserted.is_active,
+            images: dbImages && dbImages.length > 0 ? dbImages : finalImages,
+            created_at: inserted.created_at,
+          };
+        }
+      } catch (err) {
+        console.error('Supabase save product error:', err);
+      }
+    }
+
+    // Fallback/local storage cache update
+    let products = getLocalData<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    if (!savedProduct) {
+      if (product.id) {
+        const index = products.findIndex(p => p.id === product.id);
+        if (index !== -1) {
+          products[index] = { ...products[index], ...product, updated_at: new Date().toISOString() } as Product;
+          setLocalData(STORAGE_KEYS.PRODUCTS, products);
+          return products[index];
+        }
+      }
+
+      savedProduct = {
+        id: 'prod-' + Date.now(),
+        sku: generatedSku,
+        name: product.name || 'New Gadwal Saree',
+        slug: cleanSlug,
+        description: product.description || '',
+        price: product.price || 9999,
+        compare_at_price: product.compare_at_price,
+        category_id: validCategoryId || 'cat-gadwal-silk',
+        category_name: categoryName,
+        fabric: product.fabric || 'Pure Gadwal Silk',
+        colour: product.colour || 'Maroon',
+        saree_length: product.saree_length || '6.2 Meters (including blouse)',
+        blouse_details: product.blouse_details || 'Attached Contrast Blouse Piece (80 cm)',
+        stock_quantity: product.stock_quantity ?? 5,
+        is_featured: product.is_featured ?? false,
+        is_active: product.is_active ?? true,
+        images: product.images && product.images.length > 0 ? product.images : [
+          {
+            id: 'img-' + Date.now(),
+            image_url: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=1000&q=85',
+            alt_text: product.name || 'Gadwal Saree',
+            display_order: 1
+          }
+        ],
+        created_at: new Date().toISOString()
+      };
+    }
+
+    const existingIdx = products.findIndex(p => p.id === savedProduct!.id);
+    if (existingIdx !== -1) {
+      products[existingIdx] = savedProduct;
+    } else {
+      products.unshift(savedProduct);
+    }
     setLocalData(STORAGE_KEYS.PRODUCTS, products);
-    return newProduct;
+
+    return savedProduct;
   },
 
   async deleteProduct(id: string): Promise<boolean> {
     if (isSupabaseConfigured) {
       try {
+        await supabase.from('product_images').delete().eq('product_id', id);
         await supabase.from('products').delete().eq('id', id);
       } catch (err) {
         console.warn('Supabase delete product error:', err);
@@ -229,31 +401,126 @@ export const api = {
 
   // CATEGORIES
   async getCategories(): Promise<Category[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from('categories')
+          .select('*')
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          const mapped: Category[] = data.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            description: c.description || '',
+            image_url: c.image_url || '',
+            is_active: c.is_active ?? true,
+            created_at: c.created_at,
+          }));
+          setLocalData(STORAGE_KEYS.CATEGORIES, mapped);
+          return mapped;
+        }
+      } catch (err) {
+        console.warn('Supabase getCategories error, falling back to local storage:', err);
+      }
+    }
     return getLocalData<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
   },
 
   async saveCategory(cat: Partial<Category>): Promise<Category> {
-    let categories = getLocalData<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
-    if (cat.id) {
-      const idx = categories.findIndex(c => c.id === cat.id);
-      if (idx !== -1) {
-        categories[idx] = { ...categories[idx], ...cat } as Category;
-        setLocalData(STORAGE_KEYS.CATEGORIES, categories);
-        return categories[idx];
+    const slug = (cat.name || 'category')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+
+    let savedCat: Category | null = null;
+
+    if (isSupabaseConfigured) {
+      try {
+        if (cat.id && isUuid(cat.id)) {
+          const { data, error } = await supabase
+            .from('categories')
+            .update({
+              name: cat.name,
+              slug,
+              description: cat.description || '',
+              image_url: cat.image_url || '',
+              is_active: cat.is_active ?? true,
+            })
+            .eq('id', cat.id)
+            .select()
+            .single();
+
+          if (error) throw error;
+          savedCat = {
+            id: data.id,
+            name: data.name,
+            slug: data.slug,
+            description: data.description,
+            image_url: data.image_url,
+            is_active: data.is_active,
+            created_at: data.created_at,
+          };
+        } else {
+          const { data, error } = await supabase
+            .from('categories')
+            .insert({
+              name: cat.name || 'New Category',
+              slug,
+              description: cat.description || '',
+              image_url: cat.image_url || 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=800&q=80',
+              is_active: cat.is_active ?? true,
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+          savedCat = {
+            id: data.id,
+            name: data.name,
+            slug: data.slug,
+            description: data.description,
+            image_url: data.image_url,
+            is_active: data.is_active,
+            created_at: data.created_at,
+          };
+        }
+      } catch (err) {
+        console.warn('Supabase saveCategory error:', err);
       }
     }
-    const newCat: Category = {
-      id: 'cat-' + Date.now(),
-      name: cat.name || 'New Category',
-      slug: (cat.name || 'new-category').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      description: cat.description || '',
-      image_url: cat.image_url || 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=800&q=80',
-      is_active: true,
-      created_at: new Date().toISOString()
-    };
-    categories.push(newCat);
+
+    let categories = getLocalData<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    if (!savedCat) {
+      if (cat.id) {
+        const idx = categories.findIndex(c => c.id === cat.id);
+        if (idx !== -1) {
+          categories[idx] = { ...categories[idx], ...cat } as Category;
+          setLocalData(STORAGE_KEYS.CATEGORIES, categories);
+          return categories[idx];
+        }
+      }
+      savedCat = {
+        id: 'cat-' + Date.now(),
+        name: cat.name || 'New Category',
+        slug,
+        description: cat.description || '',
+        image_url: cat.image_url || 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=800&q=80',
+        is_active: true,
+        created_at: new Date().toISOString()
+      };
+    }
+
+    const cIdx = categories.findIndex(c => c.id === savedCat!.id);
+    if (cIdx !== -1) {
+      categories[cIdx] = savedCat;
+    } else {
+      categories.push(savedCat);
+    }
     setLocalData(STORAGE_KEYS.CATEGORIES, categories);
-    return newCat;
+    return savedCat;
   },
 
   async deleteCategory(id: string): Promise<boolean> {
@@ -291,7 +558,17 @@ export const api = {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     const orderNumber = `VGSH-${dateStr}-${randomNum}`;
 
-    const newOrder: Order = {
+    const formattedItems = orderPayload.items.map(i => ({
+      id: 'item-' + Math.random().toString(36).substring(2, 9),
+      product_id: i.product.id,
+      product_name_snapshot: i.product.name,
+      product_image_snapshot: i.product.images[0]?.image_url || '',
+      unit_price: i.product.price,
+      quantity: i.quantity,
+      line_total: i.product.price * i.quantity,
+    }));
+
+    let newOrder: Order = {
       id: 'ord-' + Date.now(),
       order_number: orderNumber,
       user_id: orderPayload.userId,
@@ -309,16 +586,38 @@ export const api = {
       razorpay_payment_id: orderPayload.razorpayPaymentId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      items: orderPayload.items.map(i => ({
-        id: 'item-' + Math.random().toString(36).substring(2, 9),
-        product_id: i.product.id,
-        product_name_snapshot: i.product.name,
-        product_image_snapshot: i.product.images[0]?.image_url || '',
-        unit_price: i.product.price,
-        quantity: i.quantity,
-        line_total: i.product.price * i.quantity,
-      })),
+      items: formattedItems,
     };
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data: dbOrder, error: ordErr } = await supabase.from('orders').insert({
+          order_number: orderNumber,
+          user_id: isUuid(orderPayload.userId) ? orderPayload.userId : null,
+          customer_name: orderPayload.userName || orderPayload.address.full_name,
+          customer_phone: orderPayload.address.phone,
+          customer_email: orderPayload.userEmail || orderPayload.address.email,
+          address_snapshot: {
+            ...orderPayload.address,
+            order_items: formattedItems
+          },
+          subtotal: orderPayload.subtotal,
+          delivery_charge: orderPayload.deliveryCharge,
+          discount_amount: orderPayload.discountAmount,
+          total_amount: orderPayload.totalAmount,
+          payment_method: orderPayload.paymentProvider,
+          payment_provider: orderPayload.paymentProvider,
+          payment_status: orderPayload.paymentStatus,
+          order_status: orderPayload.paymentStatus === 'Paid' ? 'Confirmed' : 'Pending',
+        }).select().single();
+
+        if (!ordErr && dbOrder) {
+          newOrder.id = dbOrder.id;
+        }
+      } catch (err) {
+        console.warn('Supabase createOrder error, local order saved:', err);
+      }
+    }
 
     orders.unshift(newOrder);
     setLocalData(STORAGE_KEYS.ORDERS, orders);
@@ -337,20 +636,72 @@ export const api = {
   },
 
   async getOrderById(orderIdOrNumber: string): Promise<Order | null> {
-    const orders = getLocalData<Order[]>(STORAGE_KEYS.ORDERS, []);
+    const orders = await this.getAllOrders();
     return orders.find(o => o.id === orderIdOrNumber || o.order_number.toLowerCase() === orderIdOrNumber.toLowerCase()) || null;
   },
 
   async getOrdersByUserId(userId: string): Promise<Order[]> {
-    const orders = getLocalData<Order[]>(STORAGE_KEYS.ORDERS, []);
+    const orders = await this.getAllOrders();
     return orders.filter(o => o.user_id === userId);
   },
 
   async getAllOrders(): Promise<Order[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          const mapped: Order[] = data.map((o: any) => ({
+            id: o.id,
+            order_number: o.order_number,
+            user_id: o.user_id || 'guest',
+            user_email: o.customer_email || o.address_snapshot?.email,
+            user_name: o.customer_name || o.address_snapshot?.full_name,
+            address_snapshot: o.address_snapshot,
+            subtotal: Number(o.subtotal),
+            delivery_charge: Number(o.delivery_charge),
+            discount_amount: Number(o.discount_amount),
+            total_amount: Number(o.total_amount),
+            payment_provider: o.payment_provider || o.payment_method || 'whatsapp',
+            payment_status: o.payment_status as PaymentStatus,
+            order_status: o.order_status as OrderStatus,
+            created_at: o.created_at,
+            updated_at: o.updated_at,
+            items: (o.address_snapshot?.order_items || []).map((it: any, idx: number) => ({
+              id: it.id || `item-${idx}`,
+              product_id: it.product_id,
+              product_name_snapshot: it.product_name_snapshot || it.product_name || 'Gadwal Saree',
+              product_image_snapshot: it.product_image_snapshot || it.product_image || '',
+              unit_price: Number(it.unit_price || 0),
+              quantity: Number(it.quantity || 1),
+              line_total: Number(it.line_total || it.unit_price || 0),
+            })),
+          }));
+          setLocalData(STORAGE_KEYS.ORDERS, mapped);
+          return mapped;
+        }
+      } catch (err) {
+        console.warn('Supabase getAllOrders error, fallback to local storage:', err);
+      }
+    }
     return getLocalData<Order[]>(STORAGE_KEYS.ORDERS, []);
   },
 
   async updateOrderStatus(orderId: string, status: OrderStatus): Promise<Order | null> {
+    if (isSupabaseConfigured && isUuid(orderId)) {
+      try {
+        await supabase
+          .from('orders')
+          .update({ order_status: status, updated_at: new Date().toISOString() })
+          .eq('id', orderId);
+      } catch (err) {
+        console.warn('Supabase updateOrderStatus error:', err);
+      }
+    }
     const orders = getLocalData<Order[]>(STORAGE_KEYS.ORDERS, []);
     const idx = orders.findIndex(o => o.id === orderId);
     if (idx !== -1) {
@@ -363,6 +714,20 @@ export const api = {
   },
 
   async updatePaymentStatus(orderId: string, paymentStatus: PaymentStatus, paymentDetails?: { razorpayPaymentId?: string }): Promise<Order | null> {
+    if (isSupabaseConfigured && isUuid(orderId)) {
+      try {
+        await supabase
+          .from('orders')
+          .update({
+            payment_status: paymentStatus,
+            order_status: paymentStatus === 'Paid' ? 'Confirmed' : 'Pending',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', orderId);
+      } catch (err) {
+        console.warn('Supabase updatePaymentStatus error:', err);
+      }
+    }
     const orders = getLocalData<Order[]>(STORAGE_KEYS.ORDERS, []);
     const idx = orders.findIndex(o => o.id === orderId);
     if (idx !== -1) {
@@ -474,7 +839,3 @@ export const api = {
     return updated;
   }
 };
-
-function itemCategoriesLocal(): Category[] {
-  return getLocalData<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
-}
