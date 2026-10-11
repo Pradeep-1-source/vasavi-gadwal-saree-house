@@ -191,7 +191,21 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         <HolographicTiltLogin
           initialMode={authMode}
           onSuccess={() => {
-            if (returnTo) onNavigate(returnTo);
+            if (returnTo) {
+              onNavigate(returnTo);
+            } else {
+              try {
+                const saved = localStorage.getItem('vgsh_auth_user');
+                if (saved) {
+                  const u = JSON.parse(saved);
+                  if (u.role === 'admin') {
+                    onNavigate('admin');
+                    return;
+                  }
+                }
+              } catch {}
+              setActiveTab('profile');
+            }
           }}
         />
 

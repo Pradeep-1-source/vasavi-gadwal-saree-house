@@ -236,11 +236,12 @@ export const HolographicTiltLogin: React.FC<HolographicTiltLoginProps> = ({
                 </>
               )}
 
-              {/* Email Field */}
+              {/* Email / Username Field */}
               <div className="holo-field">
                 <input
                   id="holo-email"
-                  type="email"
+                  type="text"
+                  inputMode="email"
                   placeholder=" "
                   required
                   value={email}
