@@ -256,6 +256,20 @@ export const api = {
     return newCat;
   },
 
+  async deleteCategory(id: string): Promise<boolean> {
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('categories').delete().eq('id', id);
+      } catch (err) {
+        console.warn('Supabase delete category error:', err);
+      }
+    }
+    let categories = getLocalData<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    categories = categories.filter(c => c.id !== id);
+    setLocalData(STORAGE_KEYS.CATEGORIES, categories);
+    return true;
+  },
+
   // ORDERS
   async createOrder(orderPayload: {
     userId: string;

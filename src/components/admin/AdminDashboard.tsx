@@ -225,6 +225,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     loadAllData();
   };
 
+  const handleDeleteCategory = async (id: string, name?: string) => {
+    const associatedProducts = products.filter((p) => p.category_id === id);
+    let confirmMsg = `Are you sure you want to permanently delete category "${name || 'this category'}"?`;
+    if (associatedProducts.length > 0) {
+      confirmMsg += `\n\nNotice: ${associatedProducts.length} saree(s) currently belong to this category. Deleting it will leave them uncategorized. Proceed?`;
+    }
+    if (window.confirm(confirmMsg)) {
+      await api.deleteCategory(id);
+      setIsCategoryModalOpen(false);
+      setEditingCategory(null);
+      loadAllData();
+    }
+  };
+
   // REVIEW ACTIONS
   const handleToggleReviewApproval = async (id: string, current: boolean) => {
     await api.updateReviewStatus(id, !current);
@@ -797,15 +811,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                       {c.description}
                     </p>
                   </div>
-                  <button
-                    onClick={() => {
-                      setEditingCategory(c);
-                      setIsCategoryModalOpen(true);
-                    }}
-                    className="p-1.5 text-stone-400 hover:text-[#58101E]"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => {
+                        setEditingCategory(c);
+                        setIsCategoryModalOpen(true);
+                      }}
+                      className="p-1.5 text-stone-400 hover:text-[#58101E] hover:bg-stone-100 rounded-lg transition-colors"
+                      title="Edit Category"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCategory(c.id, c.name)}
+                      className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete Category"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1392,20 +1416,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                     className="w-full px-3 py-2 border rounded-xl"
                   />
                 </div>
-                <div className="pt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsCategoryModalOpen(false)}
-                    className="px-4 py-2 border rounded-xl text-stone-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-[#58101E] text-white font-semibold rounded-xl"
-                  >
-                    Save Category
-                  </button>
+                <div className="pt-3 border-t border-stone-200 flex items-center justify-between gap-2">
+                  <div>
+                    {editingCategory.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCategory(editingCategory.id!, editingCategory.name)}
+                        className="px-3.5 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Category</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsCategoryModalOpen(false)}
+                      className="px-4 py-2 border border-stone-300 rounded-xl text-stone-600 text-xs font-medium hover:bg-stone-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-[#58101E] hover:bg-[#801A2D] text-white text-xs font-semibold rounded-xl transition-colors shadow-xs"
+                    >
+                      Save Category
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
